@@ -471,12 +471,6 @@ export default function Home() {
             </div>
           </section>
 
-          <div className="sheetSummary">
-            <span>Destino fixo</span>
-            <strong>{SHEET_NAME}</strong>
-            <small>Colunas: data, evento, presença</small>
-          </div>
-
           {message ? <p className={`message ${saveState}`}>{message}</p> : null}
 
           <button className="primaryButton" type="submit" disabled={!canSubmit}>

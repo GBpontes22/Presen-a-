@@ -500,7 +500,6 @@ h2 {
   width: 100%;
 }
 
-.sheetSummary,
 .latestRecord {
   display: grid;
   gap: 4px;
@@ -510,22 +509,15 @@ h2 {
   background: var(--surface-soft);
 }
 
-.sheetSummary {
-  margin-top: 4px;
-}
-
 .latestRecord {
   margin-bottom: 12px;
 }
 
-.sheetSummary span,
-.sheetSummary small,
 .latestRecord span,
 .latestRecord small {
   color: var(--muted);
 }
 
-.sheetSummary strong,
 .latestRecord strong {
   color: var(--text);
   overflow-wrap: anywhere;

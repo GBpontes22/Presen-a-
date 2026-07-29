@@ -21,7 +21,8 @@ function doPost(event) {
       "presença",
     ]);
 
-    recordsSheet.appendRow([record.data, record.evento, record.presenca]);
+    const recordRows = record.participants.map((name) => [record.data, record.evento, name]);
+    recordsSheet.getRange(recordsSheet.getLastRow() + 1, 1, recordRows.length, 3).setValues(recordRows);
     syncParticipants_(spreadsheet, record.participants);
 
     return jsonResponse_({
@@ -48,10 +49,8 @@ function parsePayload_(event) {
 function normalizeRecord_(payload) {
   const data = clean_(payload.data);
   const evento = clean_(payload.evento);
-  const presenca = cleanPresence_(payload.presenca);
-  const participants = Array.isArray(payload.participants)
-    ? payload.participants.map(clean_).filter(Boolean)
-    : presenca.split(/\n|,/).map(clean_).filter(Boolean);
+  const rawPresence = cleanPresence_(payload.presenca);
+  const participants = normalizeParticipants_(payload.participants, rawPresence);
 
   if (!data) {
     throw new Error("Data não informada.");
@@ -59,14 +58,14 @@ function normalizeRecord_(payload) {
   if (!evento) {
     throw new Error("Evento não informado.");
   }
-  if (!presenca) {
+  if (!participants.length) {
     throw new Error("Presença não informada.");
   }
 
   return {
     data,
     evento,
-    presenca,
+    presenca: participants.join("\n"),
     participants,
   };
 }
@@ -127,6 +126,15 @@ function cleanPresence_(value) {
     .map(clean_)
     .filter(Boolean)
     .join("\n");
+}
+
+function normalizeParticipants_(participants, presence) {
+  const names =
+    Array.isArray(participants) && participants.length
+      ? participants
+      : String(presence || "").split(/\n|,/);
+
+  return names.map(clean_).filter(Boolean);
 }
 
 function jsonResponse_(payload) {
