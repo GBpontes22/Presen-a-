@@ -36,7 +36,6 @@ function doPost(event) {
     const sheets = [
       ensureGeneralSheet_(spreadsheet),
       ensureSheet_(spreadsheet, getMonthlySheetName_(record.data), RECORD_HEADERS),
-      ensureSheet_(spreadsheet, getEventSheetName_(record), RECORD_HEADERS),
     ];
 
     sheets.forEach((sheet) => appendRows_(sheet, recordRows));
@@ -113,10 +112,6 @@ function getMonthlySheetName_(dateValue) {
   return `${MONTH_NAMES[parsed.month - 1]} ${parsed.year}`;
 }
 
-function getEventSheetName_(record) {
-  return sanitizeSheetName_(`${record.data} - ${record.evento}`);
-}
-
 function parseDate_(value) {
   const text = clean_(value);
   let match = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
@@ -144,11 +139,6 @@ function toSheetDate_(value) {
   const parsed = parseDate_(value);
   if (!parsed) return value;
   return new Date(parsed.year, parsed.month - 1, parsed.day);
-}
-
-function sanitizeSheetName_(value) {
-  const name = clean_(value).replace(/[:\\/?*[\]]/g, "-").slice(0, 100).trim();
-  return name || "Evento";
 }
 
 function syncParticipants_(spreadsheet, participants) {
