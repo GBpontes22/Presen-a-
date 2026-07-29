@@ -1,0 +1,35 @@
+{
+  "id": "/",
+  "name": "Presença do Embaixador",
+  "short_name": "Presença",
+  "description": "Preencha data, evento e presença direto na planilha do Embaixador.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f4f6f8",
+  "theme_color": "#08056f",
+  "icons": [
+    {
+      "src": "/logo-er.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Novo registro",
+      "short_name": "Novo",
+      "description": "Abrir o formulário de presença.",
+      "url": "/",
+      "icons": [
+        {
+          "src": "/logo-er.png",
+          "sizes": "512x512",
+          "type": "image/png"
+        }
+      ]
+    }
+  ]
+}

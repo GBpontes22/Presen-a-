@@ -1,103 +1,89 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
-const SPREADSHEET_ID = "14U1vFIGf9GTNyEzxt9uXx3kEjLpN2K9LTMlFSY9B9bk";
+const SPREADSHEET_ID = "1Vufd1iCOEj450pKEfGg7Kz1OiXyx_7ybfj1mubdvFmQ";
+const SHEET_NAME = "Página1";
 const SHEET_URL =
-  "https://docs.google.com/spreadsheets/d/14U1vFIGf9GTNyEzxt9uXx3kEjLpN2K9LTMlFSY9B9bk/edit";
+  "https://docs.google.com/spreadsheets/d/1Vufd1iCOEj450pKEfGg7Kz1OiXyx_7ybfj1mubdvFmQ/edit";
 
-const APPS_SCRIPT_CODE = String.raw`const SPREADSHEET_ID = "14U1vFIGf9GTNyEzxt9uXx3kEjLpN2K9LTMlFSY9B9bk";
+const STORAGE_KEYS = {
+  endpoint: "embaixador.endpoint",
+  records: "embaixador.records",
+};
+
+const APPS_SCRIPT_CODE = String.raw`const SPREADSHEET_ID = "1Vufd1iCOEj450pKEfGg7Kz1OiXyx_7ybfj1mubdvFmQ";
+const SHEET_NAME = "Página1";
+const HEADERS = ["data", "evento", "presença"];
 
 function doGet() {
-  return jsonResponse({ ok: true, app: "Presença Embaixada" });
+  return jsonResponse({ ok: true, app: "Presença do Embaixador" });
 }
 
 function doPost(e) {
   try {
     const payload = JSON.parse(e.postData.contents || "{}");
-    const meetingName = String(payload.meetingName || "").trim();
-    const meetingDate = String(payload.meetingDate || "").trim();
-    const presentParticipants = Array.isArray(payload.presentParticipants)
-      ? payload.presentParticipants.map(String).map((name) => name.trim()).filter(Boolean)
-      : [];
-    const allParticipants = Array.isArray(payload.allParticipants)
-      ? payload.allParticipants.map(String).map((name) => name.trim()).filter(Boolean)
-      : presentParticipants;
+    const sourceEntries = Array.isArray(payload.entries) ? payload.entries : [payload];
+    const rows = sourceEntries.map(normalizeEntry);
 
-    if (!meetingName) throw new Error("Nome da reunião ausente.");
-    if (!meetingDate) throw new Error("Data da reunião ausente.");
-    if (presentParticipants.length === 0) {
-      throw new Error("Nenhum participante presente foi marcado.");
+    if (rows.length === 0) {
+      throw new Error("Nenhum registro recebido.");
     }
 
-    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-    const cadastro = ensureSheet(ss, "Cadastro");
-    const geral = ensureSheet(ss, "Geral");
-    const indice = ensureSheet(ss, "Reuniões");
-    const modelo = ss.getSheetByName("Modelo Reunião");
+    const spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sheet = spreadsheet.getSheetByName(SHEET_NAME) || spreadsheet.insertSheet(SHEET_NAME);
+    ensureHeaders(sheet);
 
-    syncCadastro(cadastro, allParticipants);
-
-    const sheetName = uniqueSheetName(ss, cleanSheetName(meetingName));
-    const meetingSheet = modelo ? modelo.copyTo(ss).setName(sheetName) : ss.insertSheet(sheetName);
-    meetingSheet.getRange("B3").setValue(meetingName);
-    meetingSheet.getRange("B4").setValue(new Date(meetingDate + "T00:00:00"));
-    meetingSheet.getRange("A9:B208").clearContent();
-    meetingSheet
-      .getRange(9, 1, presentParticipants.length, 2)
-      .setValues(presentParticipants.map((name) => [name, true]));
-
-    const dateValue = new Date(meetingDate + "T00:00:00");
-    const geralStart = Math.max(geral.getLastRow() + 1, 6);
-    geral
-      .getRange(geralStart, 1, presentParticipants.length, 5)
-      .setValues(presentParticipants.map((name) => [dateValue, meetingName, name, true, sheetName]));
-
-    const indiceStart = Math.max(indice.getLastRow() + 1, 6);
-    indice.getRange(indiceStart, 1, 1, 4).setValues([
-      [dateValue, meetingName, sheetName, presentParticipants.length],
-    ]);
+    const startRow = Math.max(sheet.getLastRow() + 1, 2);
+    sheet.getRange(startRow, 1, rows.length, HEADERS.length).setValues(rows);
+    sheet.getRange(startRow, 1, rows.length, 1).setNumberFormat("dd/mm/yyyy");
 
     return jsonResponse({
       ok: true,
-      sheetName,
-      savedRows: presentParticipants.length,
-      spreadsheetUrl: ss.getUrl(),
+      savedRows: rows.length,
+      spreadsheetUrl: spreadsheet.getUrl(),
     });
   } catch (error) {
-    return jsonResponse({ ok: false, error: String(error && error.message ? error.message : error) });
+    return jsonResponse({
+      ok: false,
+      error: String(error && error.message ? error.message : error),
+    });
   }
 }
 
-function ensureSheet(ss, name) {
-  return ss.getSheetByName(name) || ss.insertSheet(name);
-}
+function normalizeEntry(entry) {
+  const data = String(entry.data || entry.date || "").trim();
+  const evento = String(entry.evento || entry.event || "").trim();
+  const presenca = String(entry.presenca || entry.presença || entry.presence || "").trim();
 
-function syncCadastro(sheet, names) {
-  if (sheet.getLastRow() < 5) {
-    sheet.getRange("A5:B5").setValues([["Nome do participante", "Observações"]]);
+  if (!data) throw new Error("Data ausente.");
+  if (!evento) throw new Error("Evento ausente.");
+  if (!presenca) throw new Error("Presença ausente.");
+
+  const dateValue = new Date(data + "T00:00:00");
+  if (isNaN(dateValue.getTime())) {
+    throw new Error("Data inválida.");
   }
-  const existing = sheet.getRange("A6:A205").getValues().flat().map(String).filter(Boolean);
-  const normalized = new Set(existing.map((name) => name.toLowerCase()));
-  const newNames = names.filter((name) => !normalized.has(name.toLowerCase()));
-  if (newNames.length === 0) return;
-  const startRow = Math.max(sheet.getLastRow() + 1, 6);
-  sheet.getRange(startRow, 1, newNames.length, 1).setValues(newNames.map((name) => [name]));
+
+  return [dateValue, evento, presenca];
 }
 
-function cleanSheetName(name) {
-  return String(name).replace(/[\\/?*[\]:]/g, "-").slice(0, 90) || "Reunião";
-}
+function ensureHeaders(sheet) {
+  const currentHeaders = sheet
+    .getRange(1, 1, 1, HEADERS.length)
+    .getValues()[0]
+    .map(function (value) {
+      return String(value).trim().toLowerCase();
+    });
 
-function uniqueSheetName(ss, base) {
-  let name = base;
-  let i = 2;
-  while (ss.getSheetByName(name)) {
-    const suffix = " (" + i + ")";
-    name = base.slice(0, 99 - suffix.length) + suffix;
-    i++;
+  const hasExpectedHeaders = HEADERS.every(function (header, index) {
+    return currentHeaders[index] === header;
+  });
+
+  if (!hasExpectedHeaders) {
+    sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
+    sheet.setFrozenRows(1);
   }
-  return name;
 }
 
 function jsonResponse(data) {
@@ -106,14 +92,22 @@ function jsonResponse(data) {
     .setMimeType(ContentService.MimeType.JSON);
 }`;
 
-type LocalMeeting = {
+type RecordStatus = "pending" | "sent";
+type SaveState = "idle" | "saving" | "success" | "queued" | "error";
+
+type AttendanceRecord = {
   id: string;
-  meetingDate: string;
-  meetingName: string;
-  presentParticipants: string[];
+  data: string;
+  evento: string;
+  presenca: string;
+  status: RecordStatus;
+  submittedAt: string;
 };
 
-type SaveState = "idle" | "saving" | "success" | "error";
+type BeforeInstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
+};
 
 function todayISO() {
   const date = new Date();
@@ -121,7 +115,7 @@ function todayISO() {
   return offsetDate.toISOString().slice(0, 10);
 }
 
-function normalizeName(value: string) {
+function normalizeText(value: string) {
   return value.trim().replace(/\s+/g, " ");
 }
 
@@ -129,169 +123,256 @@ function makeId() {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return crypto.randomUUID();
   }
+
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+function formatDate(value: string) {
+  const [year, month, day] = value.split("-");
+  return year && month && day ? `${day}/${month}/${year}` : value;
+}
+
+async function postRecords(endpoint: string, records: AttendanceRecord[]) {
+  await fetch(endpoint, {
+    method: "POST",
+    mode: "no-cors",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify({
+      spreadsheetId: SPREADSHEET_ID,
+      sheetName: SHEET_NAME,
+      entries: records.map(({ data, evento, presenca, submittedAt }) => ({
+        data,
+        evento,
+        presenca,
+        submittedAt,
+      })),
+    }),
+  });
+}
+
 export default function Home() {
-  const [meetingName, setMeetingName] = useState("");
-  const [meetingDate, setMeetingDate] = useState(todayISO);
-  const [participantInput, setParticipantInput] = useState("");
-  const [participants, setParticipants] = useState<string[]>([]);
-  const [selected, setSelected] = useState<Record<string, boolean>>({});
+  const [recordDate, setRecordDate] = useState(todayISO);
+  const [eventName, setEventName] = useState("");
+  const [presence, setPresence] = useState("");
   const [endpoint, setEndpoint] = useState("");
-  const [localMeetings, setLocalMeetings] = useState<LocalMeeting[]>([]);
+  const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [message, setMessage] = useState("");
+  const [hydrated, setHydrated] = useState(false);
+  const [isOnline, setIsOnline] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [scriptCopied, setScriptCopied] = useState(false);
+  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [isInstalled, setIsInstalled] = useState(false);
 
   useEffect(() => {
-    const storedParticipants = localStorage.getItem("presenca.participants");
-    const storedEndpoint = localStorage.getItem("presenca.endpoint");
-    const storedMeetings = localStorage.getItem("presenca.meetings");
+    try {
+      const storedEndpoint = localStorage.getItem(STORAGE_KEYS.endpoint);
+      const storedRecords = localStorage.getItem(STORAGE_KEYS.records);
 
-    if (storedParticipants) {
-      setParticipants(JSON.parse(storedParticipants));
-    }
-    if (storedEndpoint) {
-      setEndpoint(storedEndpoint);
-    }
-    if (storedMeetings) {
-      setLocalMeetings(JSON.parse(storedMeetings));
+      if (storedEndpoint) {
+        setEndpoint(storedEndpoint);
+      }
+
+      if (storedRecords) {
+        setRecords(JSON.parse(storedRecords));
+      }
+    } catch {
+      setRecords([]);
+    } finally {
+      setHydrated(true);
     }
   }, []);
 
   useEffect(() => {
-    localStorage.setItem("presenca.participants", JSON.stringify(participants));
-  }, [participants]);
+    if (!hydrated) return;
+    localStorage.setItem(STORAGE_KEYS.endpoint, endpoint);
+  }, [endpoint, hydrated]);
 
   useEffect(() => {
-    localStorage.setItem("presenca.endpoint", endpoint);
-  }, [endpoint]);
+    if (!hydrated) return;
+    localStorage.setItem(STORAGE_KEYS.records, JSON.stringify(records.slice(0, 80)));
+  }, [records, hydrated]);
 
   useEffect(() => {
-    localStorage.setItem("presenca.meetings", JSON.stringify(localMeetings.slice(0, 12)));
-  }, [localMeetings]);
+    if (typeof navigator === "undefined") return;
 
-  const presentParticipants = useMemo(
-    () => participants.filter((name) => selected[name]),
-    [participants, selected],
+    const updateOnlineState = () => setIsOnline(navigator.onLine);
+    updateOnlineState();
+
+    window.addEventListener("online", updateOnlineState);
+    window.addEventListener("offline", updateOnlineState);
+
+    return () => {
+      window.removeEventListener("online", updateOnlineState);
+      window.removeEventListener("offline", updateOnlineState);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+
+    navigator.serviceWorker.register("/sw.js").catch(() => {
+      // The app still works without the service worker during local previews.
+    });
+  }, []);
+
+  useEffect(() => {
+    const standalone =
+      window.matchMedia("(display-mode: standalone)").matches ||
+      ("standalone" in navigator && Boolean(navigator.standalone));
+    setIsInstalled(standalone);
+
+    const handlePrompt = (event: Event) => {
+      event.preventDefault();
+      setInstallPrompt(event as BeforeInstallPromptEvent);
+    };
+
+    const handleInstalled = () => {
+      setInstallPrompt(null);
+      setIsInstalled(true);
+    };
+
+    window.addEventListener("beforeinstallprompt", handlePrompt);
+    window.addEventListener("appinstalled", handleInstalled);
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handlePrompt);
+      window.removeEventListener("appinstalled", handleInstalled);
+    };
+  }, []);
+
+  const pendingRecords = useMemo(
+    () => records.filter((record) => record.status === "pending"),
+    [records],
   );
 
-  const canSave =
-    meetingName.trim().length > 0 &&
-    meetingDate.length > 0 &&
-    presentParticipants.length > 0 &&
-    endpoint.trim().length > 0 &&
+  const sentRecords = useMemo(
+    () => records.filter((record) => record.status === "sent"),
+    [records],
+  );
+
+  const canSubmit =
+    recordDate.length > 0 &&
+    eventName.trim().length > 0 &&
+    presence.trim().length > 0 &&
     saveState !== "saving";
 
-  function addParticipant(event?: FormEvent) {
-    event?.preventDefault();
-    const name = normalizeName(participantInput);
-    if (!name) return;
+  const syncPending = useCallback(async () => {
+    const targetEndpoint = endpoint.trim();
+    if (!targetEndpoint || !isOnline || pendingRecords.length === 0 || isSyncing) return;
 
-    const exists = participants.some(
-      (participant) => participant.toLowerCase() === name.toLowerCase(),
-    );
-    if (exists) {
-      setParticipantInput("");
-      return;
+    const pendingIds = new Set(pendingRecords.map((record) => record.id));
+
+    try {
+      setIsSyncing(true);
+      await postRecords(targetEndpoint, pendingRecords);
+      setRecords((current) =>
+        current
+          .map((record) =>
+            pendingIds.has(record.id) ? { ...record, status: "sent" as const } : record,
+          )
+          .slice(0, 80),
+      );
+      setSaveState("success");
+      setMessage(
+        pendingRecords.length === 1
+          ? "1 registro pendente foi enviado para a planilha."
+          : `${pendingRecords.length} registros pendentes foram enviados para a planilha.`,
+      );
+    } catch {
+      setSaveState("error");
+      setMessage("Não foi possível sincronizar agora. Os registros continuam salvos aqui.");
+    } finally {
+      setIsSyncing(false);
     }
+  }, [endpoint, isOnline, isSyncing, pendingRecords]);
 
-    setParticipants((current) => [...current, name].sort((a, b) => a.localeCompare(b)));
-    setSelected((current) => ({ ...current, [name]: true }));
-    setParticipantInput("");
-  }
+  useEffect(() => {
+    if (!hydrated || pendingRecords.length === 0 || !endpoint.trim() || !isOnline) return;
+    void syncPending();
+  }, [endpoint, hydrated, isOnline, pendingRecords.length, syncPending]);
 
-  function removeParticipant(name: string) {
-    setParticipants((current) => current.filter((participant) => participant !== name));
-    setSelected((current) => {
-      const next = { ...current };
-      delete next[name];
-      return next;
-    });
-  }
+  async function installApp() {
+    if (!installPrompt) return;
 
-  function toggleParticipant(name: string) {
-    setSelected((current) => ({ ...current, [name]: !current[name] }));
-  }
-
-  function markAll(checked: boolean) {
-    setSelected(
-      participants.reduce<Record<string, boolean>>((acc, name) => {
-        acc[name] = checked;
-        return acc;
-      }, {}),
-    );
+    await installPrompt.prompt();
+    const choice = await installPrompt.userChoice;
+    setInstallPrompt(null);
+    setIsInstalled(choice.outcome === "accepted");
   }
 
   async function copyScript() {
-    await navigator.clipboard.writeText(APPS_SCRIPT_CODE);
-    setScriptCopied(true);
-    window.setTimeout(() => setScriptCopied(false), 1800);
+    try {
+      await navigator.clipboard.writeText(APPS_SCRIPT_CODE);
+      setScriptCopied(true);
+      window.setTimeout(() => setScriptCopied(false), 1800);
+    } catch {
+      setScriptCopied(false);
+    }
   }
 
-  async function saveMeeting(event: FormEvent) {
+  async function saveRecord(event: FormEvent) {
     event.preventDefault();
     setMessage("");
 
-    if (!meetingName.trim()) {
+    const cleanEvent = normalizeText(eventName);
+    const cleanPresence = normalizeText(presence);
+
+    if (!recordDate) {
       setSaveState("error");
-      setMessage("Preencha o nome da reunião.");
+      setMessage("Preencha a data.");
       return;
     }
 
-    if (!meetingDate) {
+    if (!cleanEvent) {
       setSaveState("error");
-      setMessage("Preencha a data da reunião.");
+      setMessage("Preencha o evento.");
       return;
     }
 
-    if (presentParticipants.length === 0) {
+    if (!cleanPresence) {
       setSaveState("error");
-      setMessage("Marque pelo menos uma pessoa presente.");
+      setMessage("Preencha a presença.");
       return;
     }
 
-    if (!endpoint.trim()) {
-      setSaveState("error");
-      setMessage("Cole a URL do Web App do Apps Script para salvar no Google Planilhas.");
-      return;
-    }
-
-    const payload = {
-      meetingName: normalizeName(meetingName),
-      meetingDate,
-      presentParticipants,
-      allParticipants: participants,
-      spreadsheetId: SPREADSHEET_ID,
+    const nextRecord: AttendanceRecord = {
+      id: makeId(),
+      data: recordDate,
+      evento: cleanEvent,
+      presenca: cleanPresence,
+      status: "pending",
       submittedAt: new Date().toISOString(),
     };
 
+    const targetEndpoint = endpoint.trim();
+
+    if (!targetEndpoint || !isOnline) {
+      setRecords((current) => [nextRecord, ...current].slice(0, 80));
+      setSaveState("queued");
+      setMessage(
+        targetEndpoint
+          ? "Registro salvo no aparelho. Ele será enviado quando a conexão voltar."
+          : "Registro salvo no aparelho. Cole a URL do Web App para enviar à planilha.",
+      );
+      setEventName("");
+      setPresence("");
+      return;
+    }
+
     try {
       setSaveState("saving");
-      await fetch(endpoint.trim(), {
-        method: "POST",
-        mode: "no-cors",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify(payload),
-      });
-
-      setLocalMeetings((current) => [
-        {
-          id: makeId(),
-          meetingName: payload.meetingName,
-          meetingDate,
-          presentParticipants,
-        },
-        ...current,
-      ]);
-      setSelected({});
-      setMeetingName("");
+      await postRecords(targetEndpoint, [nextRecord]);
+      setRecords((current) => [{ ...nextRecord, status: "sent" }, ...current].slice(0, 80));
       setSaveState("success");
-      setMessage("Reunião enviada para o Google Planilhas.");
+      setMessage("Registro enviado para a planilha.");
+      setEventName("");
+      setPresence("");
     } catch {
-      setSaveState("error");
-      setMessage("Não foi possível enviar. Confira a URL do Apps Script.");
+      setRecords((current) => [nextRecord, ...current].slice(0, 80));
+      setSaveState("queued");
+      setMessage("Registro salvo no aparelho. Tente sincronizar novamente em instantes.");
     }
   }
 
@@ -301,115 +382,111 @@ export default function Home() {
         <div className="brand">
           <img src="/logo-er.png" alt="Logo ER" className="brandLogo" />
           <div>
-            <p className="eyebrow">Embaixada</p>
-            <h1>Presença de reuniões</h1>
+            <p className="eyebrow">Planilha conectada</p>
+            <h1>Presença do Embaixador</h1>
           </div>
         </div>
-        <a className="sheetLink" href={SHEET_URL} target="_blank" rel="noreferrer">
-          Abrir planilha
-        </a>
+
+        <div className="topActions">
+          {installPrompt && !isInstalled ? (
+            <button type="button" className="installButton" onClick={installApp}>
+              Instalar app
+            </button>
+          ) : null}
+          <a className="sheetLink" href={SHEET_URL} target="_blank" rel="noreferrer">
+            Abrir planilha
+          </a>
+        </div>
       </header>
 
       <section className="statusStrip" aria-live="polite">
-        <span className={endpoint ? "dot connected" : "dot"} />
-        <span>{endpoint ? "Google Planilhas conectado" : "Conexão com Google Planilhas pendente"}</span>
-        <strong>{presentParticipants.length}</strong>
-        <span>presentes marcados</span>
+        <span className={endpoint && isOnline ? "dot connected" : "dot"} />
+        <span>
+          {!isOnline
+            ? "Sem internet"
+            : endpoint
+              ? "Pronto para enviar ao Google Planilhas"
+              : "Conexão com Google Planilhas pendente"}
+        </span>
+        <strong>{pendingRecords.length}</strong>
+        <span>pendentes</span>
       </section>
 
       <div className="workspace">
-        <form className="panel meetingPanel" onSubmit={saveMeeting}>
+        <form className="panel formPanel" onSubmit={saveRecord}>
           <div className="panelHeader">
             <div>
-              <p className="eyebrow">Lançamento</p>
-              <h2>Nova reunião</h2>
+              <p className="eyebrow">Página1</p>
+              <h2>Novo registro</h2>
             </div>
-            <button type="button" className="quietButton" onClick={() => setMeetingDate(todayISO())}>
+            <button type="button" className="quietButton" onClick={() => setRecordDate(todayISO())}>
               Hoje
             </button>
           </div>
 
           <label className="field">
-            <span>Nome da reunião</span>
+            <span>Data</span>
             <input
-              value={meetingName}
-              onChange={(event) => setMeetingName(event.target.value)}
-              placeholder="Ex.: Reunião de liderança"
+              type="date"
+              value={recordDate}
+              onChange={(event) => setRecordDate(event.target.value)}
             />
           </label>
 
           <label className="field">
-            <span>Data</span>
+            <span>Evento</span>
             <input
-              type="date"
-              value={meetingDate}
-              onChange={(event) => setMeetingDate(event.target.value)}
+              value={eventName}
+              onChange={(event) => setEventName(event.target.value)}
+              placeholder="Ex.: Culto, reunião ou visita"
             />
           </label>
 
-          <div className="summaryLine">
-            <span>Lista final</span>
-            <strong>{presentParticipants.length} participantes</strong>
-          </div>
-
-          <div className="selectedList">
-            {presentParticipants.length === 0 ? (
-              <p>Nenhum presente selecionado.</p>
-            ) : (
-              presentParticipants.map((name) => <span key={name}>{name}</span>)
-            )}
-          </div>
+          <label className="field">
+            <span>Presença</span>
+            <textarea
+              value={presence}
+              onChange={(event) => setPresence(event.target.value)}
+              placeholder="Nome ou lista de presença"
+              rows={5}
+            />
+          </label>
 
           {message ? <p className={`message ${saveState}`}>{message}</p> : null}
 
-          <button className="primaryButton" type="submit" disabled={!canSave}>
-            {saveState === "saving" ? "Salvando..." : "Salvar reunião"}
+          <button className="primaryButton" type="submit" disabled={!canSubmit}>
+            {saveState === "saving"
+              ? "Enviando..."
+              : endpoint.trim() && isOnline
+                ? "Enviar para planilha"
+                : "Guardar registro"}
           </button>
         </form>
 
-        <section className="panel participantsPanel">
+        <section className="panel recordsPanel">
           <div className="panelHeader">
             <div>
-              <p className="eyebrow">Participantes</p>
-              <h2>Cadastro e presença</h2>
+              <p className="eyebrow">Histórico local</p>
+              <h2>Últimos lançamentos</h2>
             </div>
-            <div className="buttonGroup">
-              <button type="button" className="quietButton" onClick={() => markAll(true)}>
-                Todos
-              </button>
-              <button type="button" className="quietButton" onClick={() => markAll(false)}>
-                Limpar
-              </button>
-            </div>
+            <span className="countBadge">{sentRecords.length} enviados</span>
           </div>
 
-          <form className="addParticipant" onSubmit={addParticipant}>
-            <input
-              value={participantInput}
-              onChange={(event) => setParticipantInput(event.target.value)}
-              placeholder="Nome do participante"
-            />
-            <button type="submit">Adicionar</button>
-          </form>
-
-          <div className="participantList">
-            {participants.length === 0 ? (
-              <p className="emptyState">Adicione os nomes uma vez e marque presença a cada reunião.</p>
+          <div className="recordList">
+            {records.length === 0 ? (
+              <p className="emptyState">Nenhum lançamento salvo neste dispositivo.</p>
             ) : (
-              participants.map((name) => (
-                <div className="participantRow" key={name}>
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={Boolean(selected[name])}
-                      onChange={() => toggleParticipant(name)}
-                    />
-                    <span>{name}</span>
-                  </label>
-                  <button type="button" aria-label={`Remover ${name}`} onClick={() => removeParticipant(name)}>
-                    Remover
-                  </button>
-                </div>
+              records.slice(0, 14).map((record) => (
+                <article className="recordRow" key={record.id}>
+                  <div className="recordDate">
+                    <strong>{formatDate(record.data)}</strong>
+                    <span className={record.status}>{record.status === "sent" ? "Enviado" : "Pendente"}</span>
+                  </div>
+                  <div className="recordContent">
+                    <strong>{record.evento}</strong>
+                    <span>{record.presenca}</span>
+                  </div>
+                </article>
               ))
             )}
           </div>
@@ -432,6 +509,21 @@ export default function Home() {
             />
           </label>
 
+          <button
+            type="button"
+            className="quietButton fullWidth"
+            onClick={syncPending}
+            disabled={!endpoint.trim() || !isOnline || pendingRecords.length === 0 || isSyncing}
+          >
+            {isSyncing ? "Sincronizando..." : "Sincronizar pendentes"}
+          </button>
+
+          <div className="sheetInfo">
+            <span>Destino</span>
+            <strong>{SHEET_NAME}</strong>
+            <small>Colunas: data, evento, presença</small>
+          </div>
+
           <details className="scriptBox">
             <summary>Script do Google Planilhas</summary>
             <textarea readOnly value={APPS_SCRIPT_CODE} />
@@ -439,24 +531,6 @@ export default function Home() {
               {scriptCopied ? "Script copiado" : "Copiar script"}
             </button>
           </details>
-
-          <div className="recentHeader">
-            <p className="eyebrow">Últimos envios</p>
-          </div>
-          <div className="recentList">
-            {localMeetings.length === 0 ? (
-              <p className="emptyState">Sem reuniões salvas neste dispositivo.</p>
-            ) : (
-              localMeetings.map((meeting) => (
-                <div className="recentRow" key={meeting.id}>
-                  <strong>{meeting.meetingName}</strong>
-                  <span>
-                    {meeting.meetingDate} · {meeting.presentParticipants.length} presentes
-                  </span>
-                </div>
-              ))
-            )}
-          </div>
         </aside>
       </div>
     </main>

@@ -1,13 +1,24 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Presença Embaixada",
-  description: "Controle de presença para reuniões da Embaixada.",
+  title: "Presença do Embaixador",
+  description: "Lançamento de data, evento e presença direto na planilha do Embaixador.",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Presença",
+  },
   icons: {
     icon: "/logo-er.png",
     shortcut: "/logo-er.png",
+    apple: "/logo-er.png",
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#08056f",
 };
 
 export default function RootLayout({
