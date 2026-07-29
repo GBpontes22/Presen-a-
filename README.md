@@ -8,8 +8,8 @@ https://docs.google.com/spreadsheets/d/1Vufd1iCOEj450pKEfGg7Kz1OiXyx_7ybfj1mubdv
 
 - O app pode ser instalado no celular pelo navegador.
 - Os registros ficam salvos no aparelho quando a conexão cai.
-- A sincronização com o Google Planilhas usa uma URL de Web App do Google Apps Script.
-- O script necessário aparece dentro do próprio app em `Script do Google Planilhas`.
+- A planilha enviada fica vinculada diretamente no botão `Abrir planilha`.
+- A tela não mostra campos técnicos de conexão ou script.
 
 ## GitHub Pages
 

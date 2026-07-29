@@ -202,7 +202,7 @@ h2 {
 
 .workspace {
   display: grid;
-  grid-template-columns: minmax(300px, 0.92fr) minmax(360px, 1.1fr) minmax(300px, 0.82fr);
+  grid-template-columns: minmax(300px, 0.9fr) minmax(360px, 1.1fr);
   gap: 18px;
   align-items: start;
 }
@@ -234,8 +234,7 @@ h2 {
 }
 
 .field input,
-.field textarea,
-.scriptBox textarea {
+.field textarea {
   width: 100%;
   border: 1px solid var(--line-strong);
   border-radius: 8px;
@@ -256,19 +255,8 @@ h2 {
   resize: vertical;
 }
 
-.scriptBox textarea {
-  margin: 12px 0 10px;
-  min-height: 230px;
-  padding: 10px;
-  font-family: "Cascadia Code", Consolas, monospace;
-  font-size: 0.78rem;
-  line-height: 1.45;
-  resize: vertical;
-}
-
 .field input:focus,
-.field textarea:focus,
-.scriptBox textarea:focus {
+.field textarea:focus {
   border-color: var(--blue);
   box-shadow: 0 0 0 4px rgba(29, 78, 216, 0.12);
 }
@@ -304,12 +292,6 @@ h2 {
   border-color: rgba(180, 35, 24, 0.35);
   background: rgba(180, 35, 24, 0.08);
   color: var(--red);
-}
-
-.message.queued {
-  border-color: rgba(185, 93, 24, 0.35);
-  background: rgba(185, 93, 24, 0.08);
-  color: var(--orange);
 }
 
 .recordList {
@@ -360,14 +342,9 @@ h2 {
   font-weight: 800;
 }
 
-.recordDate span.sent {
+.recordDate span.saved {
   background: rgba(19, 133, 90, 0.09);
   color: var(--green);
-}
-
-.recordDate span.pending {
-  background: rgba(185, 93, 24, 0.1);
-  color: var(--orange);
 }
 
 .countBadge {
@@ -390,52 +367,44 @@ h2 {
   line-height: 1.45;
 }
 
-.sidePanel {
-  display: grid;
-  gap: 14px;
-}
-
 .fullWidth {
   width: 100%;
 }
 
-.sheetInfo {
+.sheetSummary,
+.latestRecord {
   display: grid;
   gap: 4px;
-  padding: 12px 0;
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-}
-
-.sheetInfo span,
-.sheetInfo small {
-  color: var(--muted);
-}
-
-.sheetInfo strong {
-  color: var(--text);
-}
-
-.scriptBox {
+  padding: 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface-soft);
-  padding: 12px;
 }
 
-.scriptBox summary {
-  cursor: pointer;
-  color: var(--navy);
-  font-weight: 800;
+.sheetSummary {
+  margin-top: 4px;
+}
+
+.latestRecord {
+  margin-bottom: 12px;
+}
+
+.sheetSummary span,
+.sheetSummary small,
+.latestRecord span,
+.latestRecord small {
+  color: var(--muted);
+}
+
+.sheetSummary strong,
+.latestRecord strong {
+  color: var(--text);
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 1120px) {
   .workspace {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  }
-
-  .sidePanel {
-    grid-column: 1 / -1;
   }
 }
 
