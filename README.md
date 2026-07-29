@@ -11,11 +11,20 @@ https://docs.google.com/spreadsheets/d/1Vufd1iCOEj450pKEfGg7Kz1OiXyx_7ybfj1mubdv
 - A sincronização com o Google Planilhas usa uma URL de Web App do Google Apps Script.
 - O script necessário aparece dentro do próprio app em `Script do Google Planilhas`.
 
+## GitHub Pages
+
+O workflow em `.github/workflows/pages.yml` publica o app no GitHub Pages a cada push na branch `main`.
+
+Endereço esperado:
+
+https://gbpontes22.github.io/Presen-a-/
+
 ## Desenvolvimento
 
 ```bash
 npm install
 npm run dev
 npm run build
+npm run build:github
 npm test
 ```

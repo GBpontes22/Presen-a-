@@ -51,9 +51,9 @@ test("ships installable PWA assets", async () => {
 
   assert.equal(manifest.name, "Presença do Embaixador");
   assert.equal(manifest.display, "standalone");
-  assert.equal(manifest.start_url, "/");
+  assert.equal(manifest.start_url, ".");
   assert.equal(manifest.theme_color, "#08056f");
-  assert.equal(manifest.icons[0].src, "/logo-er.png");
+  assert.equal(manifest.icons[0].src, "logo-er.png");
   assert.equal(manifest.icons[0].sizes, "512x512");
 
   assert.match(serviceWorker, /CACHE_NAME/);

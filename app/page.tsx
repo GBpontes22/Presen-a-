@@ -6,6 +6,7 @@ const SPREADSHEET_ID = "1Vufd1iCOEj450pKEfGg7Kz1OiXyx_7ybfj1mubdvFmQ";
 const SHEET_NAME = "Página1";
 const SHEET_URL =
   "https://docs.google.com/spreadsheets/d/1Vufd1iCOEj450pKEfGg7Kz1OiXyx_7ybfj1mubdvFmQ/edit";
+const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
 const STORAGE_KEYS = {
   endpoint: "embaixador.endpoint",
@@ -132,6 +133,10 @@ function formatDate(value: string) {
   return year && month && day ? `${day}/${month}/${year}` : value;
 }
 
+function withBasePath(path: string) {
+  return `${BASE_PATH}${path}`;
+}
+
 async function postRecords(endpoint: string, records: AttendanceRecord[]) {
   await fetch(endpoint, {
     method: "POST",
@@ -212,7 +217,7 @@ export default function Home() {
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
 
-    navigator.serviceWorker.register("/sw.js").catch(() => {
+    navigator.serviceWorker.register(withBasePath("/sw.js")).catch(() => {
       // The app still works without the service worker during local previews.
     });
   }, []);
@@ -364,7 +369,7 @@ export default function Home() {
     try {
       setSaveState("saving");
       await postRecords(targetEndpoint, [nextRecord]);
-      setRecords((current) => [{ ...nextRecord, status: "sent" }, ...current].slice(0, 80));
+      setRecords((current) => [{ ...nextRecord, status: "sent" as const }, ...current].slice(0, 80));
       setSaveState("success");
       setMessage("Registro enviado para a planilha.");
       setEventName("");
@@ -380,7 +385,7 @@ export default function Home() {
     <main className="appShell">
       <header className="topbar">
         <div className="brand">
-          <img src="/logo-er.png" alt="Logo ER" className="brandLogo" />
+          <img src={withBasePath("/logo-er.png")} alt="Logo ER" className="brandLogo" />
           <div>
             <p className="eyebrow">Planilha conectada</p>
             <h1>Presença do Embaixador</h1>

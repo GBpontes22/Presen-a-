@@ -1,5 +1,12 @@
 const CACHE_NAME = "presenca-embaixador-v1";
-const APP_SHELL = ["/", "/manifest.webmanifest", "/logo-er.png"];
+
+function withScope(path) {
+  const scopePath = new URL(self.registration.scope).pathname.replace(/\/$/, "");
+  return `${scopePath}${path}`;
+}
+
+const APP_ENTRY = withScope("/");
+const APP_SHELL = [APP_ENTRY, withScope("/manifest.webmanifest"), withScope("/logo-er.png")];
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
@@ -34,11 +41,11 @@ self.addEventListener("fetch", (event) => {
       fetch(request)
         .then((response) => {
           const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put("/", copy));
+          caches.open(CACHE_NAME).then((cache) => cache.put(APP_ENTRY, copy));
           return response;
         })
         .catch(async () => {
-          const cached = await caches.match("/");
+          const cached = await caches.match(APP_ENTRY);
           return (
             cached ||
             new Response("Aplicativo offline indisponível neste momento.", {
