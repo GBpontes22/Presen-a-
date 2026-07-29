@@ -120,6 +120,7 @@ h2 {
 .installButton,
 .primaryButton,
 .quietButton,
+.whatsappButton,
 .addParticipant button,
 .participantRow button {
   border: 1px solid transparent;
@@ -158,6 +159,12 @@ h2 {
   color: var(--navy);
 }
 
+.whatsappButton {
+  background: var(--green);
+  border-color: var(--green);
+  color: #ffffff;
+}
+
 .compactButton {
   min-height: 34px;
   padding: 0 10px;
@@ -166,7 +173,8 @@ h2 {
 .sheetLink:hover,
 .installButton:hover,
 .primaryButton:hover:not(:disabled),
-.quietButton:hover:not(:disabled) {
+.quietButton:hover:not(:disabled),
+.whatsappButton:hover:not(:disabled) {
   transform: translateY(-1px);
 }
 
@@ -375,6 +383,52 @@ h2 {
   font-weight: 800;
 }
 
+.shareSummary {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  background: #f0fdf4;
+  border: 1px solid rgba(19, 133, 90, 0.24);
+  border-radius: 8px;
+  color: var(--text);
+}
+
+.shareSummary > span {
+  color: var(--green);
+  font-weight: 900;
+}
+
+.shareSummary pre {
+  min-height: 58px;
+  margin: 0;
+  padding: 10px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: #ffffff;
+  border: 1px solid rgba(19, 133, 90, 0.18);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.92rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.summaryActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.summaryActions button {
+  flex: 1 1 150px;
+}
+
+.shareSummary small {
+  color: var(--green);
+  font-weight: 800;
+}
+
 .primaryButton {
   width: 100%;
   min-height: 50px;
@@ -383,6 +437,12 @@ h2 {
 
 .primaryButton:disabled {
   background: #9aa4b2;
+  color: #eef2f7;
+}
+
+.whatsappButton:disabled {
+  background: #9aa4b2;
+  border-color: #9aa4b2;
   color: #eef2f7;
 }
 
@@ -547,7 +607,8 @@ h2 {
 
   .sheetLink,
   .installButton,
-  .quietButton {
+  .quietButton,
+  .whatsappButton {
     width: 100%;
   }
 

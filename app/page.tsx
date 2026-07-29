@@ -57,6 +57,31 @@ function formatDate(value: string) {
   return year && month && day ? `${day}/${month}/${year}` : value;
 }
 
+function buildEventSummary(eventName: string, recordDate: string, names: string[]) {
+  const cleanEvent = normalizeText(eventName);
+  const title = cleanEvent && recordDate ? `${cleanEvent} - ${formatDate(recordDate)}` : "Resumo de presença";
+  const presentNames = names.length ? names.join(", ") : "Nenhum participante marcado";
+
+  return `${title}\nPresentes: ${presentNames}`;
+}
+
+async function copyText(value: string) {
+  if (navigator.clipboard && window.isSecureContext) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.top = "-1000px";
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand("copy");
+  document.body.removeChild(textarea);
+}
+
 function withBasePath(path: string) {
   return `${BASE_PATH}${path}`;
 }
@@ -98,6 +123,7 @@ export default function Home() {
   const [hydrated, setHydrated] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [shareMessage, setShareMessage] = useState("");
   const recordsRef = useRef<AttendanceRecord[]>([]);
   const isSyncingRef = useRef(false);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
@@ -193,12 +219,18 @@ export default function Home() {
     () => participants.filter((participant) => selectedParticipants[participant]),
     [participants, selectedParticipants],
   );
+  const eventSummary = useMemo(
+    () => buildEventSummary(eventName, recordDate, selectedNames),
+    [eventName, recordDate, selectedNames],
+  );
 
   const canSubmit =
     recordDate.length > 0 &&
     eventName.trim().length > 0 &&
     selectedNames.length > 0 &&
     !isSubmitting;
+  const canShareSummary =
+    recordDate.length > 0 && eventName.trim().length > 0 && selectedNames.length > 0;
 
   function updateRecordSyncStatus(id: string, syncStatus: SyncStatus) {
     setRecords((current) =>
@@ -291,9 +323,52 @@ export default function Home() {
     setIsInstalled(choice.outcome === "accepted");
   }
 
+  async function copySummary() {
+    if (!canShareSummary) return;
+
+    try {
+      await copyText(eventSummary);
+      setShareMessage("Resumo copiado.");
+    } catch {
+      setShareMessage("Não consegui copiar automaticamente. Use o botão WhatsApp.");
+    }
+  }
+
+  async function shareSummary() {
+    if (!canShareSummary) return;
+
+    let copied = false;
+    try {
+      await copyText(eventSummary);
+      copied = true;
+    } catch {
+      copied = false;
+    }
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: "Resumo de presença",
+          text: eventSummary,
+        });
+        setShareMessage("Resumo compartilhado.");
+        return;
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          setShareMessage(copied ? "Resumo copiado." : "Compartilhamento cancelado.");
+          return;
+        }
+      }
+    }
+
+    window.open(`https://wa.me/?text=${encodeURIComponent(eventSummary)}`, "_blank", "noopener,noreferrer");
+    setShareMessage(copied ? "Resumo copiado e aberto no WhatsApp." : "Resumo aberto no WhatsApp.");
+  }
+
   async function saveRecord(event: FormEvent) {
     event.preventDefault();
     setMessage("");
+    setShareMessage("");
     setIsSubmitting(true);
 
     const cleanEvent = normalizeText(eventName);
@@ -468,6 +543,20 @@ export default function Home() {
               ) : (
                 selectedNames.map((name) => <span key={name}>{name}</span>)
               )}
+            </div>
+
+            <div className="shareSummary">
+              <span>Resumo para WhatsApp</span>
+              <pre>{eventSummary}</pre>
+              <div className="summaryActions">
+                <button type="button" className="quietButton compactButton" onClick={copySummary} disabled={!canShareSummary}>
+                  Copiar resumo
+                </button>
+                <button type="button" className="whatsappButton compactButton" onClick={shareSummary} disabled={!canShareSummary}>
+                  WhatsApp
+                </button>
+              </div>
+              {shareMessage ? <small>{shareMessage}</small> : null}
             </div>
           </section>
 
