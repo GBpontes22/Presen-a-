@@ -1,6 +1,22 @@
 const SPREADSHEET_ID = "1Vufd1iCOEj450pKEfGg7Kz1OiXyx_7ybfj1mubdvFmQ";
-const RECORDS_SHEET_NAME = "Página1";
+const GENERAL_SHEET_NAME = "Geral";
+const LEGACY_RECORDS_SHEET_NAME = "Página1";
 const PARTICIPANTS_SHEET_NAME = "Participantes";
+const RECORD_HEADERS = ["data", "evento", "presença"];
+const MONTH_NAMES = [
+  "Janeiro",
+  "Fevereiro",
+  "Março",
+  "Abril",
+  "Maio",
+  "Junho",
+  "Julho",
+  "Agosto",
+  "Setembro",
+  "Outubro",
+  "Novembro",
+  "Dezembro",
+];
 
 function doGet() {
   return jsonResponse_({
@@ -15,14 +31,15 @@ function doPost(event) {
     const record = normalizeRecord_(payload);
 
     const spreadsheet = SpreadsheetApp.openById(SPREADSHEET_ID);
-    const recordsSheet = ensureSheet_(spreadsheet, RECORDS_SHEET_NAME, [
-      "data",
-      "evento",
-      "presença",
-    ]);
+    const sheetDate = toSheetDate_(record.data);
+    const recordRows = record.participants.map((name) => [sheetDate, record.evento, name]);
+    const sheets = [
+      ensureGeneralSheet_(spreadsheet),
+      ensureSheet_(spreadsheet, getMonthlySheetName_(record.data), RECORD_HEADERS),
+      ensureSheet_(spreadsheet, getEventSheetName_(record), RECORD_HEADERS),
+    ];
 
-    const recordRows = record.participants.map((name) => [record.data, record.evento, name]);
-    recordsSheet.getRange(recordsSheet.getLastRow() + 1, 1, recordRows.length, 3).setValues(recordRows);
+    sheets.forEach((sheet) => appendRows_(sheet, recordRows));
     syncParticipants_(spreadsheet, record.participants);
 
     return jsonResponse_({
@@ -68,6 +85,70 @@ function normalizeRecord_(payload) {
     presenca: participants.join("\n"),
     participants,
   };
+}
+
+function appendRows_(sheet, rows) {
+  if (!rows.length) return;
+  sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, RECORD_HEADERS.length).setValues(rows);
+}
+
+function ensureGeneralSheet_(spreadsheet) {
+  const generalSheet = spreadsheet.getSheetByName(GENERAL_SHEET_NAME);
+  if (generalSheet) {
+    return ensureSheet_(spreadsheet, GENERAL_SHEET_NAME, RECORD_HEADERS);
+  }
+
+  const legacySheet = spreadsheet.getSheetByName(LEGACY_RECORDS_SHEET_NAME);
+  if (legacySheet) {
+    legacySheet.setName(GENERAL_SHEET_NAME);
+    return ensureSheet_(spreadsheet, GENERAL_SHEET_NAME, RECORD_HEADERS);
+  }
+
+  return ensureSheet_(spreadsheet, GENERAL_SHEET_NAME, RECORD_HEADERS);
+}
+
+function getMonthlySheetName_(dateValue) {
+  const parsed = parseDate_(dateValue);
+  if (!parsed) return "Mês indefinido";
+  return `${MONTH_NAMES[parsed.month - 1]} ${parsed.year}`;
+}
+
+function getEventSheetName_(record) {
+  return sanitizeSheetName_(`${record.data} - ${record.evento}`);
+}
+
+function parseDate_(value) {
+  const text = clean_(value);
+  let match = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) {
+    return {
+      year: Number(match[1]),
+      month: Number(match[2]),
+      day: Number(match[3]),
+    };
+  }
+
+  match = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (match) {
+    return {
+      year: Number(match[3]),
+      month: Number(match[2]),
+      day: Number(match[1]),
+    };
+  }
+
+  return null;
+}
+
+function toSheetDate_(value) {
+  const parsed = parseDate_(value);
+  if (!parsed) return value;
+  return new Date(parsed.year, parsed.month - 1, parsed.day);
+}
+
+function sanitizeSheetName_(value) {
+  const name = clean_(value).replace(/[:\\/?*[\]]/g, "-").slice(0, 100).trim();
+  return name || "Evento";
 }
 
 function syncParticipants_(spreadsheet, participants) {
