@@ -446,6 +446,10 @@ h2 {
   overflow-wrap: anywhere;
 }
 
+.recordContent span {
+  white-space: pre-line;
+}
+
 .recordDate span {
   width: fit-content;
   min-height: 24px;

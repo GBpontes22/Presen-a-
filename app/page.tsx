@@ -297,7 +297,7 @@ export default function Home() {
     setIsSubmitting(true);
 
     const cleanEvent = normalizeText(eventName);
-    const cleanPresence = selectedNames.join(", ");
+    const cleanPresence = selectedNames.join("\n");
 
     if (!recordDate) {
       setSaveState("error");

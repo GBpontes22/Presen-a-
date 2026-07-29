@@ -48,10 +48,10 @@ function parsePayload_(event) {
 function normalizeRecord_(payload) {
   const data = clean_(payload.data);
   const evento = clean_(payload.evento);
-  const presenca = clean_(payload.presenca);
+  const presenca = cleanPresence_(payload.presenca);
   const participants = Array.isArray(payload.participants)
     ? payload.participants.map(clean_).filter(Boolean)
-    : presenca.split(",").map(clean_).filter(Boolean);
+    : presenca.split(/\n|,/).map(clean_).filter(Boolean);
 
   if (!data) {
     throw new Error("Data não informada.");
@@ -119,6 +119,14 @@ function ensureSheet_(spreadsheet, sheetName, headers) {
 
 function clean_(value) {
   return String(value || "").trim().replace(/\s+/g, " ");
+}
+
+function cleanPresence_(value) {
+  return String(value || "")
+    .split(/\n|,/)
+    .map(clean_)
+    .filter(Boolean)
+    .join("\n");
 }
 
 function jsonResponse_(payload) {
