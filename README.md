@@ -8,7 +8,8 @@ https://docs.google.com/spreadsheets/d/1Vufd1iCOEj450pKEfGg7Kz1OiXyx_7ybfj1mubdv
 
 - O app pode ser instalado no celular pelo navegador.
 - Os participantes adicionados ficam salvos para os próximos eventos.
-- Os registros ficam salvos no aparelho quando a conexão cai.
+- Os registros são enviados para a planilha pelo Apps Script.
+- Os registros ficam salvos no aparelho e sincronizam depois quando a conexão cai.
 - A planilha enviada fica vinculada diretamente no botão `Abrir planilha`.
 - A tela não mostra campos técnicos de conexão ou script.
 

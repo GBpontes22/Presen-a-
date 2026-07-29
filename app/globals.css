@@ -193,6 +193,11 @@ h2 {
   margin-left: auto;
 }
 
+.statusStrip small {
+  color: var(--muted);
+  font-weight: 800;
+}
+
 .dot {
   width: 10px;
   height: 10px;
@@ -452,6 +457,17 @@ h2 {
 }
 
 .recordDate span.saved {
+  background: rgba(19, 133, 90, 0.09);
+  color: var(--green);
+}
+
+.recordDate span.pending,
+.recordDate span.error {
+  background: rgba(185, 93, 24, 0.1);
+  color: var(--orange);
+}
+
+.recordDate span.synced {
   background: rgba(19, 133, 90, 0.09);
   color: var(--green);
 }

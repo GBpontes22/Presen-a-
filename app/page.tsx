@@ -1,11 +1,13 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 const SPREADSHEET_ID = "1Vufd1iCOEj450pKEfGg7Kz1OiXyx_7ybfj1mubdvFmQ";
 const SHEET_NAME = "Página1";
 const SHEET_URL =
   "https://docs.google.com/spreadsheets/d/1Vufd1iCOEj450pKEfGg7Kz1OiXyx_7ybfj1mubdvFmQ/edit";
+const GOOGLE_WEB_APP_URL =
+  "https://script.google.com/macros/s/AKfycbzQm6qU7jp5PaT2zEPy2Uw47JizwK7fKZNiifOgFzTCCvr6gn0NSvDUta8oonOmjRg/exec";
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
 const STORAGE_KEYS = {
@@ -14,6 +16,7 @@ const STORAGE_KEYS = {
 };
 
 type SaveState = "idle" | "success" | "error";
+type SyncStatus = "pending" | "synced" | "error";
 
 type AttendanceRecord = {
   id: string;
@@ -21,6 +24,9 @@ type AttendanceRecord = {
   evento: string;
   presenca: string;
   submittedAt: string;
+  participants?: string[];
+  syncStatus?: SyncStatus;
+  syncedAt?: string;
 };
 
 type BeforeInstallPromptEvent = Event & {
@@ -55,6 +61,31 @@ function withBasePath(path: string) {
   return `${BASE_PATH}${path}`;
 }
 
+async function sendRecordToSheet(record: AttendanceRecord) {
+  if (!GOOGLE_WEB_APP_URL) {
+    throw new Error("Google Web App URL is not configured.");
+  }
+
+  await fetch(GOOGLE_WEB_APP_URL, {
+    method: "POST",
+    mode: "no-cors",
+    headers: {
+      "Content-Type": "text/plain;charset=utf-8",
+    },
+    body: JSON.stringify({
+      spreadsheetId: SPREADSHEET_ID,
+      sheetName: SHEET_NAME,
+      data: record.data,
+      evento: record.evento,
+      presenca: record.presenca,
+      participants: record.participants ?? [],
+      submittedAt: record.submittedAt,
+      recordId: record.id,
+    }),
+    keepalive: true,
+  });
+}
+
 export default function Home() {
   const [recordDate, setRecordDate] = useState(todayISO);
   const [eventName, setEventName] = useState("");
@@ -65,6 +96,10 @@ export default function Home() {
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [message, setMessage] = useState("");
   const [hydrated, setHydrated] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const recordsRef = useRef<AttendanceRecord[]>([]);
+  const isSyncingRef = useRef(false);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
 
@@ -77,7 +112,13 @@ export default function Home() {
         setParticipants(JSON.parse(storedParticipants));
       }
       if (storedRecords) {
-        setRecords(JSON.parse(storedRecords));
+        const parsedRecords = JSON.parse(storedRecords) as AttendanceRecord[];
+        setRecords(
+          parsedRecords.map((record) => ({
+            ...record,
+            syncStatus: record.syncStatus ?? "pending",
+          })),
+        );
       }
     } catch {
       setRecords([]);
@@ -94,7 +135,21 @@ export default function Home() {
   useEffect(() => {
     if (!hydrated) return;
     localStorage.setItem(STORAGE_KEYS.records, JSON.stringify(records.slice(0, 80)));
+    recordsRef.current = records;
   }, [records, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+
+    function handleOnline() {
+      void syncPendingRecords();
+    }
+
+    window.addEventListener("online", handleOnline);
+    void syncPendingRecords();
+
+    return () => window.removeEventListener("online", handleOnline);
+  }, [hydrated]);
 
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
@@ -130,6 +185,10 @@ export default function Home() {
   }, []);
 
   const lastRecord = useMemo(() => records[0], [records]);
+  const pendingRecords = useMemo(
+    () => records.filter((record) => record.syncStatus !== "synced"),
+    [records],
+  );
   const selectedNames = useMemo(
     () => participants.filter((participant) => selectedParticipants[participant]),
     [participants, selectedParticipants],
@@ -138,7 +197,51 @@ export default function Home() {
   const canSubmit =
     recordDate.length > 0 &&
     eventName.trim().length > 0 &&
-    selectedNames.length > 0;
+    selectedNames.length > 0 &&
+    !isSubmitting;
+
+  function updateRecordSyncStatus(id: string, syncStatus: SyncStatus) {
+    setRecords((current) =>
+      current.map((record) =>
+        record.id === id
+          ? {
+              ...record,
+              syncStatus,
+              syncedAt: syncStatus === "synced" ? new Date().toISOString() : record.syncedAt,
+            }
+          : record,
+      ),
+    );
+  }
+
+  async function syncRecord(record: AttendanceRecord) {
+    try {
+      await sendRecordToSheet(record);
+      updateRecordSyncStatus(record.id, "synced");
+      return true;
+    } catch {
+      updateRecordSyncStatus(record.id, "error");
+      return false;
+    }
+  }
+
+  async function syncPendingRecords() {
+    if (isSyncingRef.current || !navigator.onLine) return;
+
+    const pending = recordsRef.current.filter((record) => record.syncStatus !== "synced");
+    if (pending.length === 0) return;
+
+    isSyncingRef.current = true;
+    setIsSyncing(true);
+    try {
+      for (const record of pending) {
+        await syncRecord(record);
+      }
+    } finally {
+      isSyncingRef.current = false;
+      setIsSyncing(false);
+    }
+  }
 
   function addParticipant() {
     const name = normalizeText(participantInput);
@@ -188,9 +291,10 @@ export default function Home() {
     setIsInstalled(choice.outcome === "accepted");
   }
 
-  function saveRecord(event: FormEvent) {
+  async function saveRecord(event: FormEvent) {
     event.preventDefault();
     setMessage("");
+    setIsSubmitting(true);
 
     const cleanEvent = normalizeText(eventName);
     const cleanPresence = selectedNames.join(", ");
@@ -198,18 +302,21 @@ export default function Home() {
     if (!recordDate) {
       setSaveState("error");
       setMessage("Preencha a data.");
+      setIsSubmitting(false);
       return;
     }
 
     if (!cleanEvent) {
       setSaveState("error");
       setMessage("Preencha o evento.");
+      setIsSubmitting(false);
       return;
     }
 
     if (selectedNames.length === 0) {
       setSaveState("error");
       setMessage("Marque pelo menos um participante presente.");
+      setIsSubmitting(false);
       return;
     }
 
@@ -219,13 +326,22 @@ export default function Home() {
       evento: cleanEvent,
       presenca: cleanPresence,
       submittedAt: new Date().toISOString(),
+      participants: selectedNames,
+      syncStatus: "pending",
     };
 
     setRecords((current) => [nextRecord, ...current].slice(0, 80));
-    setSaveState("success");
-    setMessage("Registro salvo. A planilha vinculada está no botão Abrir planilha.");
     setEventName("");
     setSelectedParticipants({});
+
+    const synced = await syncRecord(nextRecord);
+    setSaveState(synced ? "success" : "error");
+    setMessage(
+      synced
+        ? "Registro enviado para a planilha."
+        : "Registro salvo no aparelho. Quando a conexão voltar, o app tenta enviar para a planilha.",
+    );
+    setIsSubmitting(false);
   }
 
   return (
@@ -253,9 +369,16 @@ export default function Home() {
 
       <section className="statusStrip" aria-live="polite">
         <span className="dot connected" />
-        <span>Link direto para a planilha enviada</span>
+        <span>
+          {isSyncing
+            ? "Enviando para a planilha"
+            : pendingRecords.length === 0
+              ? "Planilha conectada"
+              : "Sincronização pendente"}
+        </span>
         <strong>{records.length}</strong>
         <span>registros salvos</span>
+        {pendingRecords.length > 0 ? <small>{pendingRecords.length} pendentes</small> : null}
       </section>
 
       <div className="workspace">
@@ -357,7 +480,7 @@ export default function Home() {
           {message ? <p className={`message ${saveState}`}>{message}</p> : null}
 
           <button className="primaryButton" type="submit" disabled={!canSubmit}>
-            Salvar registro
+            {isSubmitting ? "Enviando..." : "Salvar registro"}
           </button>
         </form>
 
@@ -386,7 +509,9 @@ export default function Home() {
                 <article className="recordRow" key={record.id}>
                   <div className="recordDate">
                     <strong>{formatDate(record.data)}</strong>
-                    <span className="saved">Salvo</span>
+                    <span className={`saved ${record.syncStatus ?? "pending"}`}>
+                      {record.syncStatus === "synced" ? "Enviado" : "Pendente"}
+                    </span>
                   </div>
                   <div className="recordContent">
                     <strong>{record.evento}</strong>
