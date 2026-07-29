@@ -8,7 +8,10 @@ const SHEET_URL =
   "https://docs.google.com/spreadsheets/d/1Vufd1iCOEj450pKEfGg7Kz1OiXyx_7ybfj1mubdvFmQ/edit";
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
-const STORAGE_KEY = "embaixador.records";
+const STORAGE_KEYS = {
+  participants: "embaixador.participants",
+  records: "embaixador.records",
+};
 
 type SaveState = "idle" | "success" | "error";
 
@@ -55,7 +58,9 @@ function withBasePath(path: string) {
 export default function Home() {
   const [recordDate, setRecordDate] = useState(todayISO);
   const [eventName, setEventName] = useState("");
-  const [presence, setPresence] = useState("");
+  const [participantInput, setParticipantInput] = useState("");
+  const [participants, setParticipants] = useState<string[]>([]);
+  const [selectedParticipants, setSelectedParticipants] = useState<Record<string, boolean>>({});
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [message, setMessage] = useState("");
@@ -65,8 +70,12 @@ export default function Home() {
 
   useEffect(() => {
     try {
-      const storedRecords = localStorage.getItem(STORAGE_KEY);
+      const storedParticipants = localStorage.getItem(STORAGE_KEYS.participants);
+      const storedRecords = localStorage.getItem(STORAGE_KEYS.records);
 
+      if (storedParticipants) {
+        setParticipants(JSON.parse(storedParticipants));
+      }
       if (storedRecords) {
         setRecords(JSON.parse(storedRecords));
       }
@@ -79,7 +88,12 @@ export default function Home() {
 
   useEffect(() => {
     if (!hydrated) return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(records.slice(0, 80)));
+    localStorage.setItem(STORAGE_KEYS.participants, JSON.stringify(participants));
+  }, [participants, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    localStorage.setItem(STORAGE_KEYS.records, JSON.stringify(records.slice(0, 80)));
   }, [records, hydrated]);
 
   useEffect(() => {
@@ -116,11 +130,54 @@ export default function Home() {
   }, []);
 
   const lastRecord = useMemo(() => records[0], [records]);
+  const selectedNames = useMemo(
+    () => participants.filter((participant) => selectedParticipants[participant]),
+    [participants, selectedParticipants],
+  );
 
   const canSubmit =
     recordDate.length > 0 &&
     eventName.trim().length > 0 &&
-    presence.trim().length > 0;
+    selectedNames.length > 0;
+
+  function addParticipant() {
+    const name = normalizeText(participantInput);
+    if (!name) return;
+
+    const exists = participants.some(
+      (participant) => participant.toLowerCase() === name.toLowerCase(),
+    );
+    if (exists) {
+      setParticipantInput("");
+      return;
+    }
+
+    setParticipants((current) => [...current, name].sort((a, b) => a.localeCompare(b)));
+    setSelectedParticipants((current) => ({ ...current, [name]: true }));
+    setParticipantInput("");
+  }
+
+  function removeParticipant(name: string) {
+    setParticipants((current) => current.filter((participant) => participant !== name));
+    setSelectedParticipants((current) => {
+      const next = { ...current };
+      delete next[name];
+      return next;
+    });
+  }
+
+  function toggleParticipant(name: string) {
+    setSelectedParticipants((current) => ({ ...current, [name]: !current[name] }));
+  }
+
+  function markParticipants(checked: boolean) {
+    setSelectedParticipants(
+      participants.reduce<Record<string, boolean>>((acc, name) => {
+        acc[name] = checked;
+        return acc;
+      }, {}),
+    );
+  }
 
   async function installApp() {
     if (!installPrompt) return;
@@ -136,7 +193,7 @@ export default function Home() {
     setMessage("");
 
     const cleanEvent = normalizeText(eventName);
-    const cleanPresence = normalizeText(presence);
+    const cleanPresence = selectedNames.join(", ");
 
     if (!recordDate) {
       setSaveState("error");
@@ -150,9 +207,9 @@ export default function Home() {
       return;
     }
 
-    if (!cleanPresence) {
+    if (selectedNames.length === 0) {
       setSaveState("error");
-      setMessage("Preencha a presença.");
+      setMessage("Marque pelo menos um participante presente.");
       return;
     }
 
@@ -168,7 +225,7 @@ export default function Home() {
     setSaveState("success");
     setMessage("Registro salvo. A planilha vinculada está no botão Abrir planilha.");
     setEventName("");
-    setPresence("");
+    setSelectedParticipants({});
   }
 
   return (
@@ -231,15 +288,65 @@ export default function Home() {
             />
           </label>
 
-          <label className="field">
-            <span>Presença</span>
-            <textarea
-              value={presence}
-              onChange={(event) => setPresence(event.target.value)}
-              placeholder="Nome ou lista de presença"
-              rows={5}
-            />
-          </label>
+          <section className="field participantsField">
+            <div className="participantTitleRow">
+              <span>Presença</span>
+              <div className="buttonGroup">
+                <button type="button" className="quietButton compactButton" onClick={() => markParticipants(true)}>
+                  Todos
+                </button>
+                <button type="button" className="quietButton compactButton" onClick={() => markParticipants(false)}>
+                  Limpar
+                </button>
+              </div>
+            </div>
+
+            <div className="addParticipant">
+              <input
+                value={participantInput}
+                onChange={(event) => setParticipantInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter") return;
+                  event.preventDefault();
+                  addParticipant();
+                }}
+                placeholder="Nome do participante"
+              />
+              <button type="button" onClick={addParticipant}>
+                Adicionar
+              </button>
+            </div>
+
+            <div className="participantList">
+              {participants.length === 0 ? (
+                <p className="emptyState">Adicione os nomes uma vez. Eles ficarão salvos para os próximos eventos.</p>
+              ) : (
+                participants.map((name) => (
+                  <div className="participantRow" key={name}>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(selectedParticipants[name])}
+                        onChange={() => toggleParticipant(name)}
+                      />
+                      <span>{name}</span>
+                    </label>
+                    <button type="button" aria-label={`Remover ${name}`} onClick={() => removeParticipant(name)}>
+                      Remover
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="selectedList">
+              {selectedNames.length === 0 ? (
+                <p>Nenhum participante marcado.</p>
+              ) : (
+                selectedNames.map((name) => <span key={name}>{name}</span>)
+              )}
+            </div>
+          </section>
 
           <div className="sheetSummary">
             <span>Destino fixo</span>

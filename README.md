@@ -7,6 +7,7 @@ https://docs.google.com/spreadsheets/d/1Vufd1iCOEj450pKEfGg7Kz1OiXyx_7ybfj1mubdv
 ## Como Funciona
 
 - O app pode ser instalado no celular pelo navegador.
+- Os participantes adicionados ficam salvos para os próximos eventos.
 - Os registros ficam salvos no aparelho quando a conexão cai.
 - A planilha enviada fica vinculada diretamente no botão `Abrir planilha`.
 - A tela não mostra campos técnicos de conexão ou script.

@@ -39,6 +39,10 @@ test("server-renders the attendance PWA shell", async () => {
   assert.match(html, /Data/);
   assert.match(html, /Evento/);
   assert.match(html, /Presença/);
+  assert.match(html, /Nome do participante/);
+  assert.match(html, /Adicionar/);
+  assert.match(html, /Todos/);
+  assert.match(html, /Limpar/);
   assert.match(html, /Link direto para a planilha enviada/);
   assert.match(html, new RegExp(spreadsheetId));
   assert.doesNotMatch(html, /URL do Web App|Sincronizar pendentes|Script do Google Planilhas|Conexão/i);
